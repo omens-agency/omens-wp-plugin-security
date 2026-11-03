@@ -1,3 +1,5 @@
+<img src="assets/icon-128x128.png" width="64" height="64" alt="" align="left"> 
+
 # Omens Security
 
 Closes username enumeration on a WordPress site and ships the rest of the house hardening behind opt-in filters. Built 2026-11-02 for the roughly 54 Pressable client sites that run a purchased theme (Elementor, WPBakery, Astra and friends) with a child theme and no repo, where the starter theme's `library/php/security.php` has nowhere to live. Repo: `github.com/omens-agency/omens-wp-plugin-security` (public, so sites can install and update from it without a token). Plugin folder and slug: `omens-wp-plugin-security`.
