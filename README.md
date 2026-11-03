@@ -2,7 +2,7 @@
 
 Closes username enumeration on a WordPress site and ships the rest of the house hardening behind opt-in filters. Built 2026-11-02 for the roughly 54 Pressable client sites that run a purchased theme (Elementor, WPBakery, Astra and friends) with a child theme and no repo, where the starter theme's `library/php/security.php` has nowhere to live. Repo: `github.com/omens-agency/omens-wp-plugin-security` (public, so sites can install and update from it without a token). Plugin folder and slug: `omens-wp-plugin-security`.
 
-Two files of logic: `includes/security.php` (the guards) and `includes/updates.php` (self-updating from GitHub releases). The guards are a port of the starter theme's `security.php` at 1.11.0 plus the `author_redirect` filter from starter PR #2.
+Two files of logic: `includes/security.php` (the guards, every function prefixed `omens_secplugin_`) and `includes/updates.php` (self-updating from GitHub releases). The guards are a port of the starter theme's `security.php` at 1.11.0 plus the `author_redirect` filter from starter PR #2.
 
 ## Why it is a plugin, not theme code
 
@@ -57,12 +57,23 @@ add_filter( 'omens/security/hsts', fn() => 'max-age=86400' );
 
 ## Themes built on the starter
 
-The starter theme (`omens-wp-starter-theme` 1.10.0+) ships the same guards under the same `omens_security_*` function names, so a starter-based theme does not need this plugin. If one gets it anyway (a blanket rollout, say), nothing breaks: the plugin defines `OMENS_SECURITY_PLUGIN`, every function in it is wrapped in `function_exists()`, and the starter's loader skips its own `security.php` when the constant is defined (starter PR #3). Note the defaults then flip: the plugin's headers, HSTS, pingback removal and file-editor lock are off until the theme opts in with the filters above. Themes scaffolded before that loader change need the one-line guard themselves:
+The starter theme (`omens-wp-starter-theme` 1.10.0+) ships the same guards in `library/php/security.php`, so a starter-based theme does not need this plugin. If one gets it anyway (a blanket rollout, say), the two run side by side: the plugin's functions carry the `omens_secplugin_` prefix, so nothing is redeclared, and a theme that has its own `omens_security_*` helpers (the-peak's `omens_security_headers()`, for one) is no longer affected. The 1.0.0 and 1.0.1 releases used the starter's `omens_security_` names and fataled beside any such theme; both are withdrawn.
+
+What the starter's loader skip adds (starter PR #3, `OMENS_SECURITY_PLUGIN` defined by the plugin) is that the theme stops hooking the same guards a second time. Without the skip both copies run; the result is the same redirects and refusals twice over, which works but is untidy, and the theme's defaults (headers on) win over the plugin's (headers off). With the skip, the plugin's defaults apply and headers, HSTS, pingback removal and the file-editor lock are off until the theme opts in with the filters above. Themes scaffolded before that loader change can add the one-line guard themselves:
 
 ```php
 if ( ! defined( 'OMENS_SECURITY_PLUGIN' ) ) {
 	require_once get_template_directory() . '/library/php/security.php';
 }
+```
+
+### Pre-install check
+
+Before activating on any site, grep the active theme tree (parent and child) for the plugin's prefix. The count must be zero; anything else means a name collision and a fatal on activation.
+
+```bash
+wp eval 'echo get_template_directory(), "\n", get_stylesheet_directory(), "\n";'
+grep -rn "function omens_secplugin_" <theme-dir> <child-theme-dir>
 ```
 
 ## Installing on a Pressable site
@@ -71,13 +82,13 @@ Through the Pressable MCP (`install_site_plugins`, which installs and activates 
 
 ```
 site_id: <id>
-plugins: [ { "path": "https://github.com/omens-agency/omens-wp-plugin-security/releases/download/v1.0.1/omens-wp-plugin-security.zip" } ]
+plugins: [ { "path": "https://github.com/omens-agency/omens-wp-plugin-security/releases/download/v1.0.2/omens-wp-plugin-security.zip" } ]
 ```
 
 Or through WP-CLI (`run_site_wpcli_commands`, or `wp` over SSH):
 
 ```bash
-wp plugin install https://github.com/omens-agency/omens-wp-plugin-security/releases/download/v1.0.1/omens-wp-plugin-security.zip --activate
+wp plugin install https://github.com/omens-agency/omens-wp-plugin-security/releases/download/v1.0.2/omens-wp-plugin-security.zip --activate
 ```
 
 Pin the version in the URL deliberately; the latest release is listed on the repo's Releases page.

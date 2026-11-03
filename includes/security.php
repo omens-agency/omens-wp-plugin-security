@@ -53,11 +53,15 @@
  *                                     DISALLOW_FILE_EDIT when wp-config has
  *                                     not.
  *
- * Every function is wrapped in function_exists() and the main plugin file
- * defines OMENS_SECURITY_PLUGIN, so a theme that ships the starter's
- * security.php can skip its copy and the two never redeclare each other.
- * Plugins load before themes, so a theme that does not skip would fatal on
- * its own declarations, which is why the starter's loader checks the constant.
+ * Every function here carries the omens_secplugin_ prefix, which no theme
+ * uses. The 1.0.x releases used the starter's own omens_security_ names, and
+ * since plugins load before themes, a theme that declared any one of those
+ * names afterward fataled on the redeclaration (idypeak.com, 2026-11-02,
+ * on its theme-local omens_security_headers()). The function_exists() wrappers
+ * stay as a belt-and-braces guard, and the main plugin file defines
+ * OMENS_SECURITY_PLUGIN so the starter's loader can skip its own security.php
+ * and not hook the same guards twice. Filter names are the public contract
+ * and have not changed.
  *
  * Notes carried over from the starter:
  *
@@ -84,7 +88,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	Opt-in switches
 ----------------------------------------*/
 
-if ( ! function_exists( 'omens_security_enabled' ) ) {
+if ( ! function_exists( 'omens_secplugin_enabled' ) ) {
 	/**
 	 * Read one of the opt-in switches. Each is a filter named
 	 * omens/security/<switch> that defaults to false.
@@ -92,7 +96,7 @@ if ( ! function_exists( 'omens_security_enabled' ) ) {
 	 * @param string $switch send_headers, send_hsts, disable_pingbacks or disallow_file_edit.
 	 * @return bool
 	 */
-	function omens_security_enabled( $switch ) {
+	function omens_secplugin_enabled( $switch ) {
 		return (bool) apply_filters( 'omens/security/' . $switch, false );
 	}
 }
@@ -100,9 +104,9 @@ if ( ! function_exists( 'omens_security_enabled' ) ) {
 /*----------------------------------------
 	File editor (opt in)
 ----------------------------------------*/
-add_action( 'init', 'omens_security_file_edit', 1 );
+add_action( 'init', 'omens_secplugin_file_edit', 1 );
 
-if ( ! function_exists( 'omens_security_file_edit' ) ) {
+if ( ! function_exists( 'omens_secplugin_file_edit' ) ) {
 	/**
 	 * The dashboard theme and plugin editor is the first thing an attacker
 	 * uses after a login compromise. wp-config.php is the preferred home for
@@ -110,8 +114,8 @@ if ( ! function_exists( 'omens_security_file_edit' ) ) {
 	 * host-managed. Deliberately NOT DISALLOW_FILE_MODS, which also blocks
 	 * plugin updates. Runs at init so a theme's filter is already in place.
 	 */
-	function omens_security_file_edit() {
-		if ( defined( 'DISALLOW_FILE_EDIT' ) || ! omens_security_enabled( 'disallow_file_edit' ) ) {
+	function omens_secplugin_file_edit() {
+		if ( defined( 'DISALLOW_FILE_EDIT' ) || ! omens_secplugin_enabled( 'disallow_file_edit' ) ) {
 			return;
 		}
 		define( 'DISALLOW_FILE_EDIT', true );
@@ -121,9 +125,9 @@ if ( ! function_exists( 'omens_security_file_edit' ) ) {
 /*----------------------------------------
 	XML-RPC: pingbacks off, endpoint kept (opt in)
 ----------------------------------------*/
-add_filter( 'xmlrpc_methods', 'omens_security_xmlrpc_methods' );
+add_filter( 'xmlrpc_methods', 'omens_secplugin_xmlrpc_methods' );
 
-if ( ! function_exists( 'omens_security_xmlrpc_methods' ) ) {
+if ( ! function_exists( 'omens_secplugin_xmlrpc_methods' ) ) {
 	/**
 	 * Remove the pingback methods, which let anyone use the site to send
 	 * requests to a third party. Jetpack's own methods are untouched.
@@ -131,8 +135,8 @@ if ( ! function_exists( 'omens_security_xmlrpc_methods' ) ) {
 	 * @param array $methods XML-RPC method name => callback.
 	 * @return array
 	 */
-	function omens_security_xmlrpc_methods( $methods ) {
-		if ( omens_security_enabled( 'disable_pingbacks' ) ) {
+	function omens_secplugin_xmlrpc_methods( $methods ) {
+		if ( omens_secplugin_enabled( 'disable_pingbacks' ) ) {
 			unset( $methods['pingback.ping'], $methods['pingback.extensions.getPingbacks'] );
 		}
 		return $methods;
@@ -143,18 +147,18 @@ if ( ! function_exists( 'omens_security_xmlrpc_methods' ) ) {
 	User enumeration (default on)
 ----------------------------------------*/
 
-if ( ! function_exists( 'omens_security_author_archives' ) ) {
+if ( ! function_exists( 'omens_secplugin_author_archives' ) ) {
 	/**
 	 * Whether this site keeps author archives (see the file header).
 	 *
 	 * @return bool
 	 */
-	function omens_security_author_archives() {
+	function omens_secplugin_author_archives() {
 		return (bool) apply_filters( 'omens/security/author_archives', false );
 	}
 }
 
-if ( ! function_exists( 'omens_security_author_redirect' ) ) {
+if ( ! function_exists( 'omens_secplugin_author_redirect' ) ) {
 	/**
 	 * Where logged-out author requests land (see the file header). The front
 	 * page by default; a site with a better destination, such as an About or
@@ -168,15 +172,15 @@ if ( ! function_exists( 'omens_security_author_redirect' ) ) {
 	 *
 	 * @return string
 	 */
-	function omens_security_author_redirect() {
+	function omens_secplugin_author_redirect() {
 		$url = (string) apply_filters( 'omens/security/author_redirect', home_url( '/' ) );
 		return wp_validate_redirect( $url, home_url( '/' ) );
 	}
 }
 
-add_action( 'template_redirect', 'omens_security_author_guard', 1 );
+add_action( 'template_redirect', 'omens_secplugin_author_guard', 1 );
 
-if ( ! function_exists( 'omens_security_author_guard' ) ) {
+if ( ! function_exists( 'omens_secplugin_author_guard' ) ) {
 	/**
 	 * Logged out, ?author=N and ?author_name=x never reach WordPress's
 	 * canonical redirect (which would answer with /author/<login-derived-slug>/),
@@ -189,7 +193,7 @@ if ( ! function_exists( 'omens_security_author_guard' ) ) {
 	 * a 302, not a 301: a 301 is cached by the browser, so an editor who hits
 	 * their own archive logged out, then logs in, would keep being bounced.
 	 */
-	function omens_security_author_guard() {
+	function omens_secplugin_author_guard() {
 		if ( is_user_logged_in() ) {
 			return;
 		}
@@ -201,16 +205,16 @@ if ( ! function_exists( 'omens_security_author_guard' ) ) {
 		// the var itself: an unknown slug and a real one must both redirect.
 		$archive = is_author() || '' !== get_query_var( 'author_name' );
 
-		if ( $probe || ( $archive && ! omens_security_author_archives() ) ) {
-			wp_safe_redirect( omens_security_author_redirect(), 302 );
+		if ( $probe || ( $archive && ! omens_secplugin_author_archives() ) ) {
+			wp_safe_redirect( omens_secplugin_author_redirect(), 302 );
 			exit;
 		}
 	}
 }
 
-add_filter( 'rest_pre_dispatch', 'omens_security_rest_users', 10, 3 );
+add_filter( 'rest_pre_dispatch', 'omens_secplugin_rest_users', 10, 3 );
 
-if ( ! function_exists( 'omens_security_rest_users' ) ) {
+if ( ! function_exists( 'omens_secplugin_rest_users' ) ) {
 	/**
 	 * Refuse /wp/v2/users (list and single) to anonymous requests. Covers the
 	 * ?rest_route= form too, since both dispatch here. REST routes match
@@ -221,7 +225,7 @@ if ( ! function_exists( 'omens_security_rest_users' ) ) {
 	 * @param WP_REST_Request $request Request.
 	 * @return mixed
 	 */
-	function omens_security_rest_users( $result, $server, $request ) {
+	function omens_secplugin_rest_users( $result, $server, $request ) {
 		if ( null !== $result || is_user_logged_in() ) {
 			return $result;
 		}
@@ -236,24 +240,24 @@ if ( ! function_exists( 'omens_security_rest_users' ) ) {
 	}
 }
 
-add_filter( 'oembed_response_data', 'omens_security_oembed_author' );
+add_filter( 'oembed_response_data', 'omens_secplugin_oembed_author' );
 
-if ( ! function_exists( 'omens_security_oembed_author' ) ) {
+if ( ! function_exists( 'omens_secplugin_oembed_author' ) ) {
 	/**
 	 * oEmbed responses carry the author's name and archive URL. Drop both.
 	 *
 	 * @param array $data oEmbed response data.
 	 * @return array
 	 */
-	function omens_security_oembed_author( $data ) {
+	function omens_secplugin_oembed_author( $data ) {
 		unset( $data['author_name'], $data['author_url'] );
 		return $data;
 	}
 }
 
-add_filter( 'wp_sitemaps_add_provider', 'omens_security_sitemap_users', 10, 2 );
+add_filter( 'wp_sitemaps_add_provider', 'omens_secplugin_sitemap_users', 10, 2 );
 
-if ( ! function_exists( 'omens_security_sitemap_users' ) ) {
+if ( ! function_exists( 'omens_secplugin_sitemap_users' ) ) {
 	/**
 	 * Core's users sitemap lists every author slug. Off unless the site keeps
 	 * author archives.
@@ -262,8 +266,8 @@ if ( ! function_exists( 'omens_security_sitemap_users' ) ) {
 	 * @param string                     $name     Provider name.
 	 * @return WP_Sitemaps_Provider|false
 	 */
-	function omens_security_sitemap_users( $provider, $name ) {
-		if ( 'users' === $name && ! omens_security_author_archives() ) {
+	function omens_secplugin_sitemap_users( $provider, $name ) {
+		if ( 'users' === $name && ! omens_secplugin_author_archives() ) {
 			return false;
 		}
 		return $provider;
@@ -281,9 +285,9 @@ if ( ! function_exists( 'omens_security_sitemap_users' ) ) {
  * has a filter on its "author sitemap on/off" setting, so this works on the
  * output instead: the index entry and the entries in the author sitemap.
  */
-add_filter( 'wpseo_sitemap_exclude_author', 'omens_security_yoast_authors' );
+add_filter( 'wpseo_sitemap_exclude_author', 'omens_secplugin_yoast_authors' );
 
-if ( ! function_exists( 'omens_security_yoast_authors' ) ) {
+if ( ! function_exists( 'omens_secplugin_yoast_authors' ) ) {
 	/**
 	 * Yoast: an empty author list drops author-sitemap.xml from the index and
 	 * leaves the file itself with no entries. Applied by exclude_users() in
@@ -292,14 +296,14 @@ if ( ! function_exists( 'omens_security_yoast_authors' ) ) {
 	 * @param array $users Users that would be listed.
 	 * @return array
 	 */
-	function omens_security_yoast_authors( $users ) {
-		return omens_security_author_archives() ? $users : array();
+	function omens_secplugin_yoast_authors( $users ) {
+		return omens_secplugin_author_archives() ? $users : array();
 	}
 }
 
-add_filter( 'rank_math/sitemap/index/entry', 'omens_security_rank_math_index', 10, 2 );
+add_filter( 'rank_math/sitemap/index/entry', 'omens_secplugin_rank_math_index', 10, 2 );
 
-if ( ! function_exists( 'omens_security_rank_math_index' ) ) {
+if ( ! function_exists( 'omens_secplugin_rank_math_index' ) ) {
 	/**
 	 * Rank Math: a false index entry is skipped. Type is 'author' for the
 	 * author sitemap's index lines.
@@ -308,17 +312,17 @@ if ( ! function_exists( 'omens_security_rank_math_index' ) ) {
 	 * @param string      $type Provider type.
 	 * @return array|false
 	 */
-	function omens_security_rank_math_index( $item, $type ) {
-		if ( 'author' === $type && ! omens_security_author_archives() ) {
+	function omens_secplugin_rank_math_index( $item, $type ) {
+		if ( 'author' === $type && ! omens_secplugin_author_archives() ) {
 			return false;
 		}
 		return $item;
 	}
 }
 
-add_filter( 'rank_math/sitemap/entry', 'omens_security_rank_math_entry', 10, 2 );
+add_filter( 'rank_math/sitemap/entry', 'omens_secplugin_rank_math_entry', 10, 2 );
 
-if ( ! function_exists( 'omens_security_rank_math_entry' ) ) {
+if ( ! function_exists( 'omens_secplugin_rank_math_entry' ) ) {
 	/**
 	 * Rank Math: a false entry is left out of author-sitemap.xml when it is
 	 * requested directly. Type is 'user' for author entries.
@@ -327,17 +331,17 @@ if ( ! function_exists( 'omens_security_rank_math_entry' ) ) {
 	 * @param string      $type Entry type.
 	 * @return array|false
 	 */
-	function omens_security_rank_math_entry( $url, $type ) {
-		if ( 'user' === $type && ! omens_security_author_archives() ) {
+	function omens_secplugin_rank_math_entry( $url, $type ) {
+		if ( 'user' === $type && ! omens_secplugin_author_archives() ) {
 			return false;
 		}
 		return $url;
 	}
 }
 
-add_filter( 'aioseo_sitemap_indexes', 'omens_security_aioseo_indexes' );
+add_filter( 'aioseo_sitemap_indexes', 'omens_secplugin_aioseo_indexes' );
 
-if ( ! function_exists( 'omens_security_aioseo_indexes' ) ) {
+if ( ! function_exists( 'omens_secplugin_aioseo_indexes' ) ) {
 	/**
 	 * AIOSEO: drop the author-<filename>[N].xml lines from the root index.
 	 * The index is built from a user count with no filter of its own, so
@@ -346,8 +350,8 @@ if ( ! function_exists( 'omens_security_aioseo_indexes' ) ) {
 	 * @param array $indexes Index entries (loc, lastmod, count).
 	 * @return array
 	 */
-	function omens_security_aioseo_indexes( $indexes ) {
-		if ( omens_security_author_archives() ) {
+	function omens_secplugin_aioseo_indexes( $indexes ) {
+		if ( omens_secplugin_author_archives() ) {
 			return $indexes;
 		}
 		return array_values(
@@ -361,23 +365,23 @@ if ( ! function_exists( 'omens_security_aioseo_indexes' ) ) {
 	}
 }
 
-add_filter( 'aioseo_sitemap_author_archives', 'omens_security_aioseo_authors' );
+add_filter( 'aioseo_sitemap_author_archives', 'omens_secplugin_aioseo_authors' );
 
-if ( ! function_exists( 'omens_security_aioseo_authors' ) ) {
+if ( ! function_exists( 'omens_secplugin_aioseo_authors' ) ) {
 	/**
 	 * AIOSEO: empty the author sitemap itself, for a direct request.
 	 *
 	 * @param array $entries Author archive entries.
 	 * @return array
 	 */
-	function omens_security_aioseo_authors( $entries ) {
-		return omens_security_author_archives() ? $entries : array();
+	function omens_secplugin_aioseo_authors( $entries ) {
+		return omens_secplugin_author_archives() ? $entries : array();
 	}
 }
 
-add_filter( 'authenticate', 'omens_security_login_errors', 100 );
+add_filter( 'authenticate', 'omens_secplugin_login_errors', 100 );
 
-if ( ! function_exists( 'omens_security_login_errors' ) ) {
+if ( ! function_exists( 'omens_secplugin_login_errors' ) ) {
 	/**
 	 * Core's login errors say whether the username exists ("the password you
 	 * entered for the username X is incorrect"). Replace the three that do
@@ -387,7 +391,7 @@ if ( ! function_exists( 'omens_security_login_errors' ) ) {
 	 * @param WP_User|WP_Error|null $user Result so far.
 	 * @return WP_User|WP_Error|null
 	 */
-	function omens_security_login_errors( $user ) {
+	function omens_secplugin_login_errors( $user ) {
 		if ( ! is_wp_error( $user ) ) {
 			return $user;
 		}
@@ -405,9 +409,9 @@ if ( ! function_exists( 'omens_security_login_errors' ) ) {
 /*----------------------------------------
 	Security headers, front end (opt in)
 ----------------------------------------*/
-add_filter( 'wp_headers', 'omens_security_headers' );
+add_filter( 'wp_headers', 'omens_secplugin_headers' );
 
-if ( ! function_exists( 'omens_security_headers' ) ) {
+if ( ! function_exists( 'omens_secplugin_headers' ) ) {
 	/**
 	 * The house header set, sent on front-end responses once a site opts in
 	 * with omens/security/send_headers. HSTS has its own switch,
@@ -418,14 +422,14 @@ if ( ! function_exists( 'omens_security_headers' ) ) {
 	 * @param array $headers Header name => value.
 	 * @return array
 	 */
-	function omens_security_headers( $headers ) {
-		if ( omens_security_enabled( 'disable_pingbacks' ) ) {
+	function omens_secplugin_headers( $headers ) {
+		if ( omens_secplugin_enabled( 'disable_pingbacks' ) ) {
 			unset( $headers['X-Pingback'] );
 		}
 
 		$set = array();
 
-		if ( omens_security_enabled( 'send_headers' ) ) {
+		if ( omens_secplugin_enabled( 'send_headers' ) ) {
 			$set = array(
 				'X-Content-Type-Options' => 'nosniff',
 				'Referrer-Policy'        => 'strict-origin-when-cross-origin',
@@ -434,7 +438,7 @@ if ( ! function_exists( 'omens_security_headers' ) ) {
 			);
 		}
 
-		if ( omens_security_enabled( 'send_hsts' ) && is_ssl() && 'production' === wp_get_environment_type() ) {
+		if ( omens_secplugin_enabled( 'send_hsts' ) && is_ssl() && 'production' === wp_get_environment_type() ) {
 			$hsts = apply_filters( 'omens/security/hsts', 'max-age=15552000' );
 			if ( $hsts ) {
 				$set['Strict-Transport-Security'] = $hsts;
