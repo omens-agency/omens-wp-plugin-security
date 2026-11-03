@@ -4,7 +4,7 @@
  * Plugin URI:        https://github.com/omens-agency/omens-wp-plugin-security
  * Update URI:        https://github.com/omens-agency/omens-wp-plugin-security
  * Description:       Closes username enumeration (author probes, the public users endpoint, the users sitemap, oEmbed bylines, telling login errors) on sites that run a purchased theme. Security headers, pingback removal and the file-editor lock are available by filter.
- * Version:           1.0.2
+ * Version:           1.0.3
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            Omens Agency
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'OMENS_SECURITY_VERSION', '1.0.2' );
+define( 'OMENS_SECURITY_VERSION', '1.0.3' );
 define( 'OMENS_SECURITY_FILE', __FILE__ );
 define( 'OMENS_SECURITY_DIR', plugin_dir_path( __FILE__ ) );
 
