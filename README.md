@@ -1,6 +1,6 @@
 # Omens Security
 
-Closes username enumeration on a WordPress site and ships the rest of the house hardening behind opt-in filters. Built 2026-11-02 for the roughly 54 Pressable client sites that run a purchased theme (Elementor, WPBakery, Astra and friends) with a child theme and no repo, where the starter theme's `library/php/security.php` has nowhere to live. Repo: `github.com/omens-agency/omens-wp-plugin-security` (private). Plugin folder and slug: `omens-wp-plugin-security`.
+Closes username enumeration on a WordPress site and ships the rest of the house hardening behind opt-in filters. Built 2026-11-02 for the roughly 54 Pressable client sites that run a purchased theme (Elementor, WPBakery, Astra and friends) with a child theme and no repo, where the starter theme's `library/php/security.php` has nowhere to live. Repo: `github.com/omens-agency/omens-wp-plugin-security` (public, so sites can install and update from it without a token). Plugin folder and slug: `omens-wp-plugin-security`.
 
 Two files of logic: `includes/security.php` (the guards) and `includes/updates.php` (self-updating from GitHub releases). The guards are a port of the starter theme's `security.php` at 1.11.0 plus the `author_redirect` filter from starter PR #2.
 
@@ -12,9 +12,10 @@ On a custom build the hardening belongs in the theme, and the starter already ca
 
 | Guard | Default | How |
 |---|---|---|
-| `?author=N`, `?author_name=x` and `/author/<slug>/` for logged-out visitors | on | 301 to the front page at `template_redirect` priority 1, ahead of the canonical redirect that would otherwise reveal `/author/<login>/`. Real and unknown authors get the same answer. |
+| `?author=N`, `?author_name=x` and `/author/<slug>/` for logged-out visitors | on | 302 to the front page at `template_redirect` priority 1, ahead of the canonical redirect that would otherwise reveal `/author/<login>/`. Real and unknown authors get the same answer. A 302 rather than a 301 so a browser does not cache the bounce for an editor who later logs in. |
 | `/wp-json/wp/v2/users` (list and single, including `?rest_route=`) for anonymous requests | on | 401 from `rest_pre_dispatch`. Logged-in users keep the endpoint; `/users/me` is untouched. |
-| Users sitemap (`/wp-sitemap-users-1.xml`) | on | provider dropped |
+| Core users sitemap (`/wp-sitemap-users-1.xml`) | on | provider dropped |
+| Author sitemaps of Yoast SEO (`/author-sitemap.xml`), Rank Math (`/author-sitemap.xml`) and All in One SEO (`/author-sitemap.xml`), which replace core's sitemaps | on | index entry removed and the sitemap emptied through each plugin's own filters (`wpseo_sitemap_exclude_author`; `rank_math/sitemap/index/entry` and `rank_math/sitemap/entry`; `aioseo_sitemap_indexes` and `aioseo_sitemap_author_archives`), each read in that plugin's source first: Yoast 28.8, Rank Math 1.0.280, AIOSEO 5.0.4. Rank Math writes generated sitemaps to disk, so after activation clear them with `wp eval 'RankMath\Sitemap\Cache::invalidate_storage();'`. Yoast's sitemap cache is off by default. AIOSEO Pro shares the Lite sitemap code; miresball runs Pro with its author sitemap already off, so the filters there have nothing to remove. |
 | oEmbed `author_name` and `author_url` | on | stripped from the response |
 | Login errors that say whether the username exists | on | one generic message; Jetpack's brute-force counting still sees every failure |
 | Front-end security headers (`X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`) | **off** | `omens/security/send_headers` |
@@ -70,26 +71,20 @@ Through the Pressable MCP (`install_site_plugins`, which installs and activates 
 
 ```
 site_id: <id>
-plugins: [ { "path": "https://github.com/omens-agency/omens-wp-plugin-security/releases/download/v1.0.0/omens-wp-plugin-security.zip" } ]
+plugins: [ { "path": "https://github.com/omens-agency/omens-wp-plugin-security/releases/download/v1.0.1/omens-wp-plugin-security.zip" } ]
 ```
 
 Or through WP-CLI (`run_site_wpcli_commands`, or `wp` over SSH):
 
 ```bash
-wp plugin install https://github.com/omens-agency/omens-wp-plugin-security/releases/download/v1.0.0/omens-wp-plugin-security.zip --activate
+wp plugin install https://github.com/omens-agency/omens-wp-plugin-security/releases/download/v1.0.1/omens-wp-plugin-security.zip --activate
 ```
 
-Both fetch the zip anonymously, and GitHub does not serve a private repo's release assets without a token, so for the private repo the zip has to reach the site another way: upload it at Plugins > Add New > Upload, or copy the folder in over SFTP. For a WP-CLI install from a private asset, download it locally first with `gh release download v1.0.0 --repo omens-agency/omens-wp-plugin-security` and install from the file.
+Pin the version in the URL deliberately; the latest release is listed on the repo's Releases page.
 
-### The update token
+### Updates
 
-Updates come from GitHub releases through Plugin Update Checker (`includes/updates.php`, library vendored in `vendor/`). Because the repo is private, each site needs a read-only GitHub token in wp-config, the same one for every `omens-wp-plugin-*` repo:
-
-```php
-define( 'OMENS_PLUGIN_UPDATE_TOKEN', 'github_pat_...' );
-```
-
-Fine-grained token, Contents: read-only, scoped to the `omens-wp-plugin-*` repos. Without it the plugin still works; it just never learns about new versions. On Pressable, add it over SFTP or with `wp config set OMENS_PLUGIN_UPDATE_TOKEN ... --type=constant` through `run_site_wpcli_commands`. WordPress checks for updates every twelve hours; to force one:
+Updates come from GitHub releases through Plugin Update Checker (`includes/updates.php`, library vendored in `vendor/`). The repo is public, so no token is needed. If a site already defines `OMENS_PLUGIN_UPDATE_TOKEN` for the private `omens-wp-plugin-*` repos it is still sent. WordPress checks for updates every twelve hours; to force one:
 
 ```bash
 wp eval '$GLOBALS["omens_security_updater"]->checkForUpdates();'
@@ -100,10 +95,13 @@ wp eval '$GLOBALS["omens_security_updater"]->checkForUpdates();'
 Logged out, after any page cache is purged:
 
 ```bash
-curl -sI 'https://example.com/?author=1' | grep -i '^location'        # front page, not /author/<login>/
+curl -sI 'https://example.com/?author=1' | grep -i '^location'        # 302 to the front page, not /author/<login>/
 curl -s 'https://example.com/wp-json/wp/v2/users' | head -c 200       # rest_user_cannot_view, 401
-curl -sI 'https://example.com/wp-sitemap-users-1.xml' | head -1       # 404
+curl -sI 'https://example.com/wp-sitemap-users-1.xml' | head -1       # 404 (on a Yoast site it 301s to /author-sitemap.xml instead)
+curl -s 'https://example.com/author-sitemap.xml' | grep -c '<loc>'    # 0, or a 404 page with no <loc>
 ```
+
+The `author-sitemap.xml` check is the one that catches the Yoast gap: with the core users sitemap gone, Yoast still listed every `/author/<login>/` there until 1.0.1.
 
 Pressable's edge answers scripted `curl` from some networks with 429; if that happens, probe from a browser.
 

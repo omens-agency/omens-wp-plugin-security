@@ -7,12 +7,13 @@
  * Two groups of behavior:
  *
  * Default on (the username-enumeration fixes from the 2026-11-02 audit):
- *   - ?author=N and ?author_name=x probes and author archives redirect to the
- *     front page for logged-out visitors. Existing and non-existent authors
- *     get the same answer, so there is nothing to compare.
+ *   - ?author=N and ?author_name=x probes and author archives redirect (302)
+ *     to the front page for logged-out visitors. Existing and non-existent
+ *     authors get the same answer, so there is nothing to compare.
  *   - /wp/v2/users (list and single) is refused to anonymous REST requests.
  *   - oEmbed responses lose their author name and archive URL.
- *   - Core's users sitemap is dropped.
+ *   - Core's users sitemap is dropped, and so are the author sitemaps of
+ *     Yoast SEO, Rank Math and All in One SEO, which replace core's.
  *   - Login errors stop saying whether the username exists.
  *
  * Default off, each behind its own filter, because these were written for new
@@ -184,7 +185,9 @@ if ( ! function_exists( 'omens_security_author_guard' ) ) {
 	 * Existing and non-existent authors get the same response, so there is
 	 * nothing to compare.
 	 *
-	 * Runs at priority 1, ahead of redirect_canonical at 10.
+	 * Runs at priority 1, ahead of redirect_canonical at 10. The redirect is
+	 * a 302, not a 301: a 301 is cached by the browser, so an editor who hits
+	 * their own archive logged out, then logs in, would keep being bounced.
 	 */
 	function omens_security_author_guard() {
 		if ( is_user_logged_in() ) {
@@ -199,7 +202,7 @@ if ( ! function_exists( 'omens_security_author_guard' ) ) {
 		$archive = is_author() || '' !== get_query_var( 'author_name' );
 
 		if ( $probe || ( $archive && ! omens_security_author_archives() ) ) {
-			wp_safe_redirect( omens_security_author_redirect(), 301 );
+			wp_safe_redirect( omens_security_author_redirect(), 302 );
 			exit;
 		}
 	}
@@ -264,6 +267,111 @@ if ( ! function_exists( 'omens_security_sitemap_users' ) ) {
 			return false;
 		}
 		return $provider;
+	}
+}
+
+/*
+ * Yoast SEO, Rank Math and All in One SEO each replace core's sitemaps with
+ * their own, and each has an author sitemap that lists /author/<login>/ for
+ * every author, so dropping core's users provider is not enough. Each hook
+ * below was read in the plugin's source before use: Yoast 28.8
+ * (inc/sitemaps/class-author-sitemap-provider.php), Rank Math 1.0.280
+ * (includes/modules/sitemap/providers/class-author.php) and AIOSEO 5.0.4
+ * (app/Common/Sitemap/Root.php and Content.php), on 2026-11-02. None of them
+ * has a filter on its "author sitemap on/off" setting, so this works on the
+ * output instead: the index entry and the entries in the author sitemap.
+ */
+add_filter( 'wpseo_sitemap_exclude_author', 'omens_security_yoast_authors' );
+
+if ( ! function_exists( 'omens_security_yoast_authors' ) ) {
+	/**
+	 * Yoast: an empty author list drops author-sitemap.xml from the index and
+	 * leaves the file itself with no entries. Applied by exclude_users() in
+	 * both get_index_links() and get_sitemap_links().
+	 *
+	 * @param array $users Users that would be listed.
+	 * @return array
+	 */
+	function omens_security_yoast_authors( $users ) {
+		return omens_security_author_archives() ? $users : array();
+	}
+}
+
+add_filter( 'rank_math/sitemap/index/entry', 'omens_security_rank_math_index', 10, 2 );
+
+if ( ! function_exists( 'omens_security_rank_math_index' ) ) {
+	/**
+	 * Rank Math: a false index entry is skipped. Type is 'author' for the
+	 * author sitemap's index lines.
+	 *
+	 * @param array|false $item Index entry (loc, lastmod).
+	 * @param string      $type Provider type.
+	 * @return array|false
+	 */
+	function omens_security_rank_math_index( $item, $type ) {
+		if ( 'author' === $type && ! omens_security_author_archives() ) {
+			return false;
+		}
+		return $item;
+	}
+}
+
+add_filter( 'rank_math/sitemap/entry', 'omens_security_rank_math_entry', 10, 2 );
+
+if ( ! function_exists( 'omens_security_rank_math_entry' ) ) {
+	/**
+	 * Rank Math: a false entry is left out of author-sitemap.xml when it is
+	 * requested directly. Type is 'user' for author entries.
+	 *
+	 * @param array|false $url  Sitemap entry (loc, mod).
+	 * @param string      $type Entry type.
+	 * @return array|false
+	 */
+	function omens_security_rank_math_entry( $url, $type ) {
+		if ( 'user' === $type && ! omens_security_author_archives() ) {
+			return false;
+		}
+		return $url;
+	}
+}
+
+add_filter( 'aioseo_sitemap_indexes', 'omens_security_aioseo_indexes' );
+
+if ( ! function_exists( 'omens_security_aioseo_indexes' ) ) {
+	/**
+	 * AIOSEO: drop the author-<filename>[N].xml lines from the root index.
+	 * The index is built from a user count with no filter of its own, so
+	 * this is the only place to remove them.
+	 *
+	 * @param array $indexes Index entries (loc, lastmod, count).
+	 * @return array
+	 */
+	function omens_security_aioseo_indexes( $indexes ) {
+		if ( omens_security_author_archives() ) {
+			return $indexes;
+		}
+		return array_values(
+			array_filter(
+				(array) $indexes,
+				function ( $index ) {
+					return empty( $index['loc'] ) || ! preg_match( '#/author-[^/]+\.xml$#i', (string) $index['loc'] );
+				}
+			)
+		);
+	}
+}
+
+add_filter( 'aioseo_sitemap_author_archives', 'omens_security_aioseo_authors' );
+
+if ( ! function_exists( 'omens_security_aioseo_authors' ) ) {
+	/**
+	 * AIOSEO: empty the author sitemap itself, for a direct request.
+	 *
+	 * @param array $entries Author archive entries.
+	 * @return array
+	 */
+	function omens_security_aioseo_authors( $entries ) {
+		return omens_security_author_archives() ? $entries : array();
 	}
 }
 

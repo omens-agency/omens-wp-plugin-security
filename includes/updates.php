@@ -4,10 +4,10 @@
  *
  * Every site running this plugin sees new releases in Plugins > Updates, the
  * way a wordpress.org plugin does, through Plugin Update Checker (MIT, vendored
- * in vendor/). The repo is private, so the site needs a read-only GitHub token
- * in wp-config: define( 'OMENS_PLUGIN_UPDATE_TOKEN', '...' ). One token covers
- * every omens-wp-plugin-* repo. Without it the plugin still works; it just does
- * not know about new versions.
+ * in vendor/). The repo is public, so no token is needed. If the site defines
+ * OMENS_PLUGIN_UPDATE_TOKEN (the shared read-only token for the private
+ * omens-wp-plugin-* repos) it is still sent, which also lifts GitHub's
+ * anonymous API rate limit.
  *
  * Publishing: tools/release.sh <version> bumps, tags and uploads the zip.
  *
