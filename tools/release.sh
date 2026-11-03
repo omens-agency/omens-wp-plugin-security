@@ -47,8 +47,10 @@ git add "$SLUG.php" && git commit -q -m "Release $VER" && git tag "v$VER"
 TMP=$(mktemp -d)
 ZIP="$TMP/$SLUG.zip"
 git archive --format=zip --prefix="$SLUG/" -o "$ZIP" "v$VER"
-unzip -l "$ZIP" | /usr/bin/grep -q " $SLUG/$SLUG.php$" || { echo "Zip is missing $SLUG/$SLUG.php."; exit 1; }
-unzip -l "$ZIP" | /usr/bin/grep -q " $SLUG/vendor/plugin-update-checker/" || { echo "Zip is missing vendor/plugin-update-checker."; exit 1; }
+# grep -c, not -q: under pipefail, -q exits on the first match and unzip dies of SIGPIPE.
+ZIPLIST=$(unzip -Z1 "$ZIP")
+/usr/bin/grep -qx "$SLUG/$SLUG.php" <<<"$ZIPLIST" || { echo "Zip is missing $SLUG/$SLUG.php."; exit 1; }
+/usr/bin/grep -q "^$SLUG/vendor/plugin-update-checker/" <<<"$ZIPLIST" || { echo "Zip is missing vendor/plugin-update-checker."; exit 1; }
 
 git push -q origin main "v$VER"
 
