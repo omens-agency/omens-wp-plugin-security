@@ -6,6 +6,7 @@
  * Description:       Closes username enumeration (author probes, the public users endpoint, the users sitemap, oEmbed bylines, telling login errors) on sites that run a purchased theme. Security headers, pingback removal and the file-editor lock are available by filter.
  * Version:           1.0.6
  * Requires at least: 6.4
+ * Tested up to:      7.1
  * Requires PHP:      8.1
  * Author:            Omens Agency
  * Author URI:        https://omens.agency
