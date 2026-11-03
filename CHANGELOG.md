@@ -1,6 +1,11 @@
 # Changelog
 
-## 1.0.5 (2026-11-03)
+## 1.0.6 (2026-11-03)
+
+- **Lost-password guard actually fires.** 1.0.5's hook looked for core's "no account" error code, but core adds that code after `lostpassword_post` runs, so the guard never matched (found on the staging smoke; 1.0.5 was never promoted). It now keys on no account having been found, and only on wp-login.php, so WooCommerce and other front-end account forms keep their own notices.
+- Everything listed under 1.0.5 below ships in this release.
+
+## 1.0.5 (2026-11-03, pre-release only, superseded by 1.0.6)
 
 Hardening round from the 2026-11-03 Dev Team audit. No new guards are on by default except the lost-password one; the rest fixes edges of the existing ones and the update pipeline.
 

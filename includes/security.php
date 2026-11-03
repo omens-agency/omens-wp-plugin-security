@@ -442,6 +442,13 @@ if ( ! function_exists( 'omens_secplugin_lostpassword' ) ) {
 	 * email" confirmation a known one gets; nothing is emailed, nothing is
 	 * revealed. Known accounts are untouched, so password resets still work.
 	 *
+	 * Core adds its "no account" error (invalidcombo) AFTER this hook fires,
+	 * so the signal here is $user_data being false with nothing else wrong
+	 * (an unknown email arrives as invalid_email, which is added before).
+	 * Only wp-login.php is redirected: WooCommerce and other front-end
+	 * account forms call retrieve_password() too and render their own
+	 * notices, so they are left alone.
+	 *
 	 * @param WP_Error      $errors    Errors so far.
 	 * @param WP_User|false $user_data The account the form named, or false.
 	 */
@@ -449,8 +456,12 @@ if ( ! function_exists( 'omens_secplugin_lostpassword' ) ) {
 		if ( $user_data instanceof WP_User || ! is_wp_error( $errors ) ) {
 			return;
 		}
-		if ( ! array_intersect( $errors->get_error_codes(), array( 'invalidcombo', 'invalid_email' ) ) ) {
+		if ( 'wp-login.php' !== ( $GLOBALS['pagenow'] ?? '' ) ) {
 			return;
+		}
+		$codes = $errors->get_error_codes();
+		if ( $codes && ! array_intersect( $codes, array( 'invalidcombo', 'invalid_email' ) ) ) {
+			return; // Some other problem (empty field, rate limit); let core say so.
 		}
 		wp_safe_redirect( add_query_arg( 'checkemail', 'confirm', wp_login_url() ) );
 		exit;
