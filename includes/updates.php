@@ -112,16 +112,45 @@ if ( ! function_exists( 'omens_secplugin_auto_update' ) ) {
 		if ( ! apply_filters( 'omens/security/auto_update', true ) ) {
 			return $update;
 		}
-		$package = ! empty( $item->package ) ? wp_parse_url( $item->package ) : array();
-		$host    = strtolower( $package['host'] ?? '' );
-		$path    = $package['path'] ?? '';
-		// Anchored on the two URL shapes the update checker writes for a release
-		// asset: the public download and the authenticated API asset. Anything
-		// else under github.com (a source zipball, a path that merely contains
-		// our name) gets the site's own answer.
-		$asset = ( 'github.com' === $host && 0 === strpos( $path, '/omens-agency/omens-wp-plugin-security/releases/download/' ) )
-			|| ( 'api.github.com' === $host && 0 === strpos( $path, '/repos/omens-agency/omens-wp-plugin-security/releases/assets/' ) );
-		return $asset ? true : $update;
+		// Only the two URL shapes the update checker writes for a release asset:
+		//   https://github.com/omens-agency/omens-wp-plugin-security/releases/download/<tag>/omens-wp-plugin-security.zip
+		//   https://api.github.com/repos/omens-agency/omens-wp-plugin-security/releases/assets/<id>
+		// Checked segment by segment over https with no userinfo or port, so a
+		// source zipball, a path that merely contains our name, or a ".." that
+		// GitHub would resolve elsewhere all get the site's own answer.
+		return omens_secplugin_auto_update_asset_url( (string) $item->package, 'omens-wp-plugin-security' ) ? true : $update;
+	}
+
+	/**
+	 * Whether a package URL is one of this plugin's own GitHub release assets.
+	 *
+	 * @param string $url  Package URL from the update offer.
+	 * @param string $slug Plugin slug (folder and repo name).
+	 * @return bool
+	 */
+	function omens_secplugin_auto_update_asset_url( $url, $slug ) {
+		$package = '' !== $url ? wp_parse_url( $url ) : false;
+		if ( ! is_array( $package ) || 'https' !== strtolower( $package['scheme'] ?? '' ) || isset( $package['user'] ) || isset( $package['pass'] ) || isset( $package['port'] ) ) {
+			return false;
+		}
+		$parts = explode( '/', trim( (string) ( $package['path'] ?? '' ), '/' ) );
+		foreach ( $parts as $part ) {
+			if ( ! preg_match( '/^[A-Za-z0-9_-][A-Za-z0-9._-]*$/', $part ) ) {
+				return false; // Empty, dot, dot-dot or percent-encoded segment.
+			}
+		}
+		$host = strtolower( $package['host'] ?? '' );
+		if ( 'github.com' === $host ) {
+			return 6 === count( $parts )
+				&& array( 'omens-agency', $slug, 'releases', 'download' ) === array_slice( $parts, 0, 4 )
+				&& $slug . '.zip' === $parts[5];
+		}
+		if ( 'api.github.com' === $host ) {
+			return 6 === count( $parts )
+				&& array( 'repos', 'omens-agency', $slug, 'releases', 'assets' ) === array_slice( $parts, 0, 5 )
+				&& ctype_digit( $parts[5] );
+		}
+		return false;
 	}
 }
 add_filter( 'auto_update_plugin', 'omens_secplugin_auto_update', 10, 2 );
