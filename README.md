@@ -2,13 +2,13 @@
 
 # Omens Security
 
-Closes username enumeration on a WordPress site and ships the rest of the house hardening behind opt-in filters. Built 2026-11-02 for the roughly 54 Pressable client sites that run a purchased theme (Elementor, WPBakery, Astra and friends) with a child theme and no repo, where the starter theme's `library/php/security.php` has nowhere to live. Repo: `github.com/omens-agency/omens-wp-plugin-security` (public, so sites can install and update from it without a token). Plugin folder and slug: `omens-wp-plugin-security`.
+Closes username enumeration on a WordPress site and ships the rest of the house hardening behind opt-in filters. Built 2026-11-02 for the Pressable client sites (87 at the time, 61 of them production) that run a purchased theme (Elementor, WPBakery, Astra and friends) with a child theme and no repo, where the starter theme's `library/php/security.php` has nowhere to live. Repo: `github.com/omens-agency/omens-wp-plugin-security` (public, so sites can install and update from it without a token). Plugin folder and slug: `omens-wp-plugin-security`.
 
 Two files of logic: `includes/security.php` (the guards, every function prefixed `omens_secplugin_`) and `includes/updates.php` (self-updating from GitHub releases). The guards are a port of the starter theme's `security.php` at 1.11.0 plus the `author_redirect` filter from starter PR #2.
 
 ## Why it is a plugin, not theme code
 
-On a custom build the hardening belongs in the theme, and the starter already carries it. On a purchased theme the child theme is the only code we own, and a child theme `functions.php` on 54 sites is 54 copies to keep in step. A plugin is one copy that updates itself. Not an mu-plugin: mu-plugins skip activation hooks, are not auto-updated, and are the documented sync trap in `../spec/environment-sync.md`.
+On a custom build the hardening belongs in the theme, and the starter already carries it. On a purchased theme the child theme is the only code we own, and a child theme `functions.php` on 60-odd sites is 60-odd copies to keep in step. A plugin is one copy that updates itself. Not an mu-plugin: mu-plugins skip activation hooks, are not auto-updated, and are the documented sync trap in `../spec/environment-sync.md`.
 
 ## What it does
 
@@ -84,28 +84,30 @@ Through the Pressable MCP (`install_site_plugins`, which installs and activates 
 
 ```
 site_id: <id>
-plugins: [ { "path": "https://github.com/omens-agency/omens-wp-plugin-security/releases/download/v1.0.2/omens-wp-plugin-security.zip" } ]
+plugins: [ { "path": "https://github.com/omens-agency/omens-wp-plugin-security/releases/latest/download/omens-wp-plugin-security.zip" } ]
 ```
 
 Or through WP-CLI (`run_site_wpcli_commands`, or `wp` over SSH):
 
 ```bash
-wp plugin install https://github.com/omens-agency/omens-wp-plugin-security/releases/download/v1.0.2/omens-wp-plugin-security.zip --activate
+wp plugin install https://github.com/omens-agency/omens-wp-plugin-security/releases/latest/download/omens-wp-plugin-security.zip --activate
 ```
 
-Pin the version in the URL deliberately; the latest release is listed on the repo's Releases page.
+`releases/latest/download/` resolves to the newest full release (GitHub skips pre-releases and drafts), so the install line never goes stale. To pin a version instead, use `releases/download/v1.0.5/omens-wp-plugin-security.zip`.
 
 ### Updates
 
-Updates come from GitHub releases through Plugin Update Checker (`includes/updates.php`, library vendored in `vendor/`). The repo is public, so no token is needed. If a site already defines `OMENS_PLUGIN_UPDATE_TOKEN` for the private `omens-wp-plugin-*` repos it is still sent. WordPress checks for updates every twelve hours; to force one:
+Updates come from GitHub releases through Plugin Update Checker (`includes/updates.php`, library vendored in `vendor/`). The repo is public, so no token is needed. If a site already defines `OMENS_PLUGIN_UPDATE_TOKEN` for the private `omens-wp-plugin-*` repos it is still sent. WordPress checks for updates every twelve hours and applies them on its twice-daily auto-update run, so a release reaches a site within about a day; to hurry one along:
 
 ```bash
 wp eval '$GLOBALS["omens_security_updater"]->checkForUpdates();'
 ```
 
-From 1.0.3 the plugin also **applies** its own updates: an `auto_update_plugin` filter in `includes/updates.php` answers yes for this slug when the package is one of our GitHub release assets. The starter theme does the same for every `omens-wp-plugin-*` slug (`library/php/omens.php`), but the purchased-theme sites this plugin is for do not run the starter, so the plugin carries the switch itself. A release therefore lands on every site within about twelve hours, through WordPress's own update cron, with nobody clicking. Sites on 1.0.0 to 1.0.2 need one last manual update to 1.0.3 to get the switch.
+From 1.0.3 the plugin also **applies** its own updates: an `auto_update_plugin` filter in `includes/updates.php` answers yes for this slug when the package is one of our GitHub release assets. The starter theme does the same for every `omens-wp-plugin-*` slug (`library/php/omens.php`), but the purchased-theme sites this plugin is for do not run the starter, so the plugin carries the switch itself. A release therefore lands on every site within about a day, through WordPress's own update cron, with nobody clicking. Sites on 1.0.0 to 1.0.2 need one last manual update to get the switch. A site that wants to review updates instead opts out with `add_filter( 'omens/security/auto_update', '__return_false' )`; it still sees them in Plugins > Updates.
 
-Because releases apply themselves, gate them: `PRERELEASE=1 tools/release.sh <version>` publishes a pre-release, which the update checker ignores. Install that zip by hand on a staging site (`wp plugin install <asset-url> --force`), run the probes in "Verifying a site", then promote it with `gh release edit v<version> --prerelease=false`. The fleet picks it up from there.
+The switch accepts only this plugin's own release asset (`.../omens-wp-plugin-security/releases/download/...` or the API asset URL), and the update checker is told to require that asset, so a release with no zip attached is skipped rather than replaced by GitHub's source tarball, which unpacks to a folder named after the commit and would deactivate the plugin.
+
+Because releases apply themselves, they are gated: `tools/release.sh <version>` publishes a pre-release, which the update checker ignores. Install that zip by hand on a staging site (`wp plugin install <asset-url> --force`), run the checks in "Verifying a site", then `VERIFIED=1 tools/promote.sh <version>` makes it the full release. The fleet picks it up from there. See "Releasing".
 
 ## Verifying a site
 
@@ -120,12 +122,21 @@ curl -s 'https://example.com/author-sitemap.xml' | grep -c '<loc>'    # 0, or a 
 
 The `author-sitemap.xml` check is the one that catches the Yoast gap: with the core users sitemap gone, Yoast still listed every `/author/<login>/` there until 1.0.1.
 
+Then in a browser, logged out:
+
+- A post with a byline: the author's name links to the front page (or the `author_redirect` target), not to `/author/<login>/`. From 1.0.5; before that the byline pointed at a URL that 302'd.
+- Log in with a real username and a wrong password, then with a made-up username: both say "The username or password you entered is incorrect." If the site runs Limit Login Attempts Reloaded, its "attempts remaining" line still follows (1.0.5 keeps core's error codes; 1.0.0 to 1.0.4 replaced them and silenced it).
+- Lost password with a made-up username: the same "Check your email" confirmation a real one gets, not "There is no account with that username" (1.0.5).
+
 Pressable's edge answers scripted `curl` from some networks with 429; if that happens, probe from a browser.
 
 ## Releasing
 
-```bash
-tools/release.sh 1.1.0 "What changed"
-```
+Every full release applies itself on every site within about a day, so the pipeline is gated and the gate is the default.
 
-Bumps the version in the header and constant, commits, tags `v1.1.0`, builds the zip from the tag (tools/ and dotfiles excluded by `.gitattributes`), pushes, and creates the GitHub release with the zip attached. That zip is what sites download.
+1. Write the `## 1.1.0` section in `CHANGELOG.md`. It becomes the release notes WordPress shows under "View version details"; the script refuses to run without it.
+2. `tools/release.sh 1.1.0`. Refuses unless you are on `main`, in sync with `origin/main`, with a clean tree. Syntax-checks every PHP file we ship, bumps the header and constant, commits, tags `v1.1.0`, builds the zip from the tag (`tools/`, `branding/` and dotfiles excluded by `.gitattributes`) and checks it contains the main file and `vendor/plugin-update-checker/`, pushes `main` and the tag, then publishes a **pre-release** as a draft, uploads the zip, and un-drafts it, so a release without its zip never exists for the update checker to see.
+3. Install the pre-release zip on a staging site (`wp plugin install <asset-url> --force`) and run "Verifying a site" there.
+4. `VERIFIED=1 tools/promote.sh 1.1.0`. Refuses a draft, an already-full release, or a release without the `omens-wp-plugin-security.zip` asset; then flips it to the full, latest release.
+
+`FULL=1 tools/release.sh 1.1.0` skips the gate and publishes the full release at once. Only for a fix that has already run on a staging site, because the fleet applies it unattended.

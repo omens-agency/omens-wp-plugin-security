@@ -20,14 +20,19 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'OMENS_SECURITY_VERSION', '1.0.4' );
-define( 'OMENS_SECURITY_FILE', __FILE__ );
-define( 'OMENS_SECURITY_DIR', plugin_dir_path( __FILE__ ) );
+// Guarded so a second copy (a "-main" folder beside the release folder, the
+// case the Plugins-screen notice in includes/updates.php is for) warns about
+// nothing and the first copy's values stand.
+defined( 'OMENS_SECURITY_VERSION' ) || define( 'OMENS_SECURITY_VERSION', '1.0.4' );
+defined( 'OMENS_SECURITY_FILE' ) || define( 'OMENS_SECURITY_FILE', __FILE__ );
+defined( 'OMENS_SECURITY_DIR' ) || define( 'OMENS_SECURITY_DIR', plugin_dir_path( __FILE__ ) );
 
-// Themes built on omens-wp-starter-theme carry the same guards in
-// library/php/security.php under the same function names. The starter's loader
-// skips its copy when this constant is defined, so the two never collide.
-define( 'OMENS_SECURITY_PLUGIN', true );
+// Themes built on omens-wp-starter-theme 1.11.2+ carry the same guards in
+// library/php/security.php and skip that file when this constant is defined,
+// so the redirects and refusals are not hooked twice. The plugin's own
+// functions are prefixed omens_secplugin_, so there is no name collision
+// either way.
+defined( 'OMENS_SECURITY_PLUGIN' ) || define( 'OMENS_SECURITY_PLUGIN', true );
 
 require_once OMENS_SECURITY_DIR . 'includes/security.php';
 require_once OMENS_SECURITY_DIR . 'includes/updates.php';

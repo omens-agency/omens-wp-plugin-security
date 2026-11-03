@@ -178,6 +178,29 @@ if ( ! function_exists( 'omens_secplugin_author_redirect' ) ) {
 	}
 }
 
+add_filter( 'author_link', 'omens_secplugin_author_link' );
+
+if ( ! function_exists( 'omens_secplugin_author_link' ) ) {
+	/**
+	 * Bylines on purchased themes (Astra's post meta, Elementor's Post Info and
+	 * Author Box, WPBakery grids) print <a href="/author/<slug>/">, and with
+	 * author archives off the guard below answers that URL with a 302. Point
+	 * the markup where the request would land instead, so visitors do not
+	 * click a link that bounces and crawlers do not log an internal redirect
+	 * on every post. Logged-in users keep the real archive link, because the
+	 * guard lets them through. get_the_author_posts_link() reads this too.
+	 *
+	 * @param string $link Author archive URL.
+	 * @return string
+	 */
+	function omens_secplugin_author_link( $link ) {
+		if ( is_user_logged_in() || omens_secplugin_author_archives() ) {
+			return $link;
+		}
+		return omens_secplugin_author_redirect();
+	}
+}
+
 add_action( 'template_redirect', 'omens_secplugin_author_guard', 1 );
 
 if ( ! function_exists( 'omens_secplugin_author_guard' ) ) {
@@ -384,9 +407,13 @@ add_filter( 'authenticate', 'omens_secplugin_login_errors', 100 );
 if ( ! function_exists( 'omens_secplugin_login_errors' ) ) {
 	/**
 	 * Core's login errors say whether the username exists ("the password you
-	 * entered for the username X is incorrect"). Replace the three that do
-	 * with one message. Brute-force counting (Jetpack) still sees every
-	 * failure, because wp_login_failed fires for any error.
+	 * entered for the username X is incorrect"). Give the three that do the
+	 * same message. The error CODES are kept: Limit Login Attempts Reloaded
+	 * and its kind hook authenticate after us and only append their "attempts
+	 * remaining" and lockout text when they see core's codes, so replacing the
+	 * code (as 1.0.0 to 1.0.4 did) silenced them. Brute-force counting
+	 * (Jetpack, Wordfence) sees every failure regardless, because
+	 * wp_login_failed fires for any error.
 	 *
 	 * @param WP_User|WP_Error|null $user Result so far.
 	 * @return WP_User|WP_Error|null
@@ -396,13 +423,37 @@ if ( ! function_exists( 'omens_secplugin_login_errors' ) ) {
 			return $user;
 		}
 		$telling = array( 'invalid_username', 'invalid_email', 'incorrect_password' );
-		if ( array_intersect( $user->get_error_codes(), $telling ) ) {
-			return new WP_Error(
-				'omens_login_failed',
-				__( '<strong>Error:</strong> The username or password you entered is incorrect.', 'omens-security' )
-			);
+		$generic = __( '<strong>Error:</strong> The username or password you entered is incorrect.', 'omens-security' );
+		foreach ( array_intersect( $user->get_error_codes(), $telling ) as $code ) {
+			$user->remove( $code );
+			$user->add( $code, $generic );
 		}
 		return $user;
+	}
+}
+
+add_action( 'lostpassword_post', 'omens_secplugin_lostpassword', 10, 2 );
+
+if ( ! function_exists( 'omens_secplugin_lostpassword' ) ) {
+	/**
+	 * The lost-password form answers an unknown username or email with "There
+	 * is no account with that username or email address", the same tell the
+	 * login guard above closes. Send an unknown name to the same "check your
+	 * email" confirmation a known one gets; nothing is emailed, nothing is
+	 * revealed. Known accounts are untouched, so password resets still work.
+	 *
+	 * @param WP_Error      $errors    Errors so far.
+	 * @param WP_User|false $user_data The account the form named, or false.
+	 */
+	function omens_secplugin_lostpassword( $errors, $user_data = null ) {
+		if ( $user_data instanceof WP_User || ! is_wp_error( $errors ) ) {
+			return;
+		}
+		if ( ! array_intersect( $errors->get_error_codes(), array( 'invalidcombo', 'invalid_email' ) ) ) {
+			return;
+		}
+		wp_safe_redirect( add_query_arg( 'checkemail', 'confirm', wp_login_url() ) );
+		exit;
 	}
 }
 

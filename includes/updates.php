@@ -15,10 +15,12 @@
  * but the sites this plugin exists for do not run the starter, so the plugin
  * answers for itself. WordPress applies it on its twice-daily update run.
  *
- * Publishing: tools/release.sh <version> bumps, tags and uploads the zip.
- * PRERELEASE=1 publishes a pre-release, which the checker ignores; install it
- * by hand on a staging site, then promote it (gh release edit vX --prerelease=false)
- * and the fleet picks it up.
+ * Publishing: tools/release.sh <version> lints, bumps, tags and uploads the
+ * zip as a PRE-RELEASE, which the checker ignores. Install that zip by hand on
+ * a staging site, run the README checks, then VERIFIED=1 tools/promote.sh
+ * <version> makes it the full release and the fleet picks it up. Only the
+ * release asset named after the slug is ever accepted; a release without it
+ * is skipped, never replaced by GitHub's source tarball.
  *
  * @package OmensSecurity
  */
@@ -42,9 +44,13 @@ add_action(
 			OMENS_SECURITY_FILE,
 			'omens-wp-plugin-security'
 		);
-		// The release asset (the zip release.sh uploads), not GitHub's source tarball,
-		// so the folder inside is the plugin slug and vendor/ is included.
-		$checker->getVcsApi()->enableReleaseAssets();
+		// Only the release asset release.sh uploads (the zip named after the slug),
+		// never GitHub's source tarball: that unpacks to a folder named after the
+		// commit, so installing it would deactivate the plugin. REQUIRE means a
+		// release with no matching zip is skipped rather than falling back.
+		$api = $checker->getVcsApi();
+		$api->enableReleaseAssets( '/^omens-wp-plugin-security\.zip$/', $api::REQUIRE_RELEASE_ASSETS );
+		$checker->setBranch( 'main' );
 		if ( defined( 'OMENS_PLUGIN_UPDATE_TOKEN' ) && OMENS_PLUGIN_UPDATE_TOKEN ) {
 			$checker->setAuthentication( OMENS_PLUGIN_UPDATE_TOKEN );
 		}
@@ -81,31 +87,41 @@ add_action(
 	}
 );
 
-/**
- * Apply our own releases automatically.
- *
- * The slug alone is not proof: the package has to be one of our GitHub
- * release assets, so a same-named plugin from anywhere else is not waved
- * through. Returns the site's own answer for everything else.
- *
- * @param bool|null $update Whether to auto-update.
- * @param object    $item   The update offer (slug, package, ...).
- * @return bool|null
- */
-add_filter(
-	'auto_update_plugin',
-	function ( $update, $item ) {
+if ( ! function_exists( 'omens_secplugin_auto_update' ) ) {
+	/**
+	 * Apply our own releases automatically.
+	 *
+	 * The slug alone is not proof: the package has to be one of our GitHub
+	 * release assets, so a same-named plugin from anywhere else is not waved
+	 * through. Returns the site's own answer for everything else.
+	 *
+	 * @param bool|null $update Whether to auto-update.
+	 * @param object    $item   The update offer (slug, package, ...).
+	 * @return bool|null
+	 */
+	function omens_secplugin_auto_update( $update, $item ) {
 		if ( empty( $item->slug ) || 'omens-wp-plugin-security' !== $item->slug ) {
+			return $update;
+		}
+		/**
+		 * Let a site opt out of unattended updates for this plugin (it still
+		 * sees them in Plugins > Updates). Default true.
+		 *
+		 * @param bool $auto Apply our releases automatically.
+		 */
+		if ( ! apply_filters( 'omens/security/auto_update', true ) ) {
 			return $update;
 		}
 		$package = ! empty( $item->package ) ? wp_parse_url( $item->package ) : array();
 		$host    = strtolower( $package['host'] ?? '' );
 		$path    = $package['path'] ?? '';
-		if ( in_array( $host, array( 'github.com', 'api.github.com' ), true ) && false !== strpos( $path, '/omens-agency/omens-wp-plugin-security/' ) ) {
-			return true;
-		}
-		return $update;
-	},
-	10,
-	2
-);
+		// Anchored on the two URL shapes the update checker writes for a release
+		// asset: the public download and the authenticated API asset. Anything
+		// else under github.com (a source zipball, a path that merely contains
+		// our name) gets the site's own answer.
+		$asset = ( 'github.com' === $host && 0 === strpos( $path, '/omens-agency/omens-wp-plugin-security/releases/download/' ) )
+			|| ( 'api.github.com' === $host && 0 === strpos( $path, '/repos/omens-agency/omens-wp-plugin-security/releases/assets/' ) );
+		return $asset ? true : $update;
+	}
+}
+add_filter( 'auto_update_plugin', 'omens_secplugin_auto_update', 10, 2 );
