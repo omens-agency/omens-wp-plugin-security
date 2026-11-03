@@ -89,7 +89,7 @@ Updates come from GitHub releases through Plugin Update Checker (`includes/updat
 define( 'OMENS_PLUGIN_UPDATE_TOKEN', 'github_pat_...' );
 ```
 
-Fine-grained token, Contents: read-only, scoped to the `omens-wp-plugin-*` repos. Without it the plugin still works; it just never learns about new versions. On Pressable, wp-config is host-managed; the token goes in through the site's wp-config editor in MyPressable or a `wp config set OMENS_PLUGIN_UPDATE_TOKEN ... --type=constant` over WP-CLI. WordPress checks for updates every twelve hours; to force one:
+Fine-grained token, Contents: read-only, scoped to the `omens-wp-plugin-*` repos. Without it the plugin still works; it just never learns about new versions. On Pressable, add it over SFTP or with `wp config set OMENS_PLUGIN_UPDATE_TOKEN ... --type=constant` through `run_site_wpcli_commands`. WordPress checks for updates every twelve hours; to force one:
 
 ```bash
 wp eval '$GLOBALS["omens_security_updater"]->checkForUpdates();'
