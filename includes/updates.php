@@ -9,7 +9,16 @@
  * omens-wp-plugin-* repos) it is still sent, which also lifts GitHub's
  * anonymous API rate limit.
  *
+ * Releases also APPLY themselves: the auto_update_plugin filter below answers
+ * yes for this plugin whenever the package is one of our GitHub release
+ * assets. The starter theme does the same for every omens-wp-plugin-* slug,
+ * but the sites this plugin exists for do not run the starter, so the plugin
+ * answers for itself. WordPress applies it on its twice-daily update run.
+ *
  * Publishing: tools/release.sh <version> bumps, tags and uploads the zip.
+ * PRERELEASE=1 publishes a pre-release, which the checker ignores; install it
+ * by hand on a staging site, then promote it (gh release edit vX --prerelease=false)
+ * and the fleet picks it up.
  *
  * @package OmensSecurity
  */
@@ -70,4 +79,33 @@ add_action(
 			)
 		) . '</p></div>';
 	}
+);
+
+/**
+ * Apply our own releases automatically.
+ *
+ * The slug alone is not proof: the package has to be one of our GitHub
+ * release assets, so a same-named plugin from anywhere else is not waved
+ * through. Returns the site's own answer for everything else.
+ *
+ * @param bool|null $update Whether to auto-update.
+ * @param object    $item   The update offer (slug, package, ...).
+ * @return bool|null
+ */
+add_filter(
+	'auto_update_plugin',
+	function ( $update, $item ) {
+		if ( empty( $item->slug ) || 'omens-wp-plugin-security' !== $item->slug ) {
+			return $update;
+		}
+		$package = ! empty( $item->package ) ? wp_parse_url( $item->package ) : array();
+		$host    = strtolower( $package['host'] ?? '' );
+		$path    = $package['path'] ?? '';
+		if ( in_array( $host, array( 'github.com', 'api.github.com' ), true ) && false !== strpos( $path, '/omens-agency/omens-wp-plugin-security/' ) ) {
+			return true;
+		}
+		return $update;
+	},
+	10,
+	2
 );

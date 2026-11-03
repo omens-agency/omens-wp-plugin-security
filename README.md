@@ -101,6 +101,10 @@ Updates come from GitHub releases through Plugin Update Checker (`includes/updat
 wp eval '$GLOBALS["omens_security_updater"]->checkForUpdates();'
 ```
 
+From 1.0.3 the plugin also **applies** its own updates: an `auto_update_plugin` filter in `includes/updates.php` answers yes for this slug when the package is one of our GitHub release assets. The starter theme does the same for every `omens-wp-plugin-*` slug (`library/php/omens.php`), but the purchased-theme sites this plugin is for do not run the starter, so the plugin carries the switch itself. A release therefore lands on every site within about twelve hours, through WordPress's own update cron, with nobody clicking. Sites on 1.0.0 to 1.0.2 need one last manual update to 1.0.3 to get the switch.
+
+Because releases apply themselves, gate them: `PRERELEASE=1 tools/release.sh <version>` publishes a pre-release, which the update checker ignores. Install that zip by hand on a staging site (`wp plugin install <asset-url> --force`), run the probes in "Verifying a site", then promote it with `gh release edit v<version> --prerelease=false`. The fleet picks it up from there.
+
 ## Verifying a site
 
 Logged out, after any page cache is purged:
