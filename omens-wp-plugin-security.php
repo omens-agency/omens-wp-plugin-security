@@ -3,7 +3,7 @@
  * Plugin Name:       Omens Security
  * Plugin URI:        https://github.com/omens-agency/omens-wp-plugin-security
  * Update URI:        https://github.com/omens-agency/omens-wp-plugin-security
- * Description:       Closes username enumeration (author probes, the public users endpoint, the users sitemap, oEmbed bylines, telling login errors) on sites that run a purchased theme. Security headers, pingback removal and the file-editor lock are available by filter.
+ * Description:       Hides your site's usernames from the public places attackers look for them: author links, the users feed, sitemaps, and login errors. Security headers, pingback removal, and a file-editor lock can be switched on per site.
  * Version:           1.0.6
  * Requires at least: 6.4
  * Tested up to:      7.1

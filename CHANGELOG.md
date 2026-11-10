@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.7
+
+- **Plain-language description on the Plugins screen.** The description named the guards in developer terms (username enumeration, oEmbed bylines). It now says what they protect, in words a site owner can read. No change to any guard or default.
+
 ## 1.0.6 (2026-11-03)
 
 - **Lost-password guard actually fires.** 1.0.5's hook looked for core's "no account" error code, but core adds that code after `lostpassword_post` runs, so the guard never matched (found on the staging smoke; 1.0.5 was never promoted). It now keys on no account having been found, and only on wp-login.php, so WooCommerce and other front-end account forms keep their own notices.
